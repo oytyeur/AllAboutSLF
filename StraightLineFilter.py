@@ -50,6 +50,8 @@ def firstPnt(pnts : np.ndarray) -> None:
     pnts[2, 0] = 2.0 * m.pi * random.rand() - m.pi
 
 def createPnts(pnts : np.ndarray, N, d0 = 0.1, shape = 0, mess = 0.1) -> None:
+    global pntsBuf
+
     i_ang = 0
     deltaAng = 0.2 * random.rand() - 0.
 
@@ -66,6 +68,8 @@ def createPnts(pnts : np.ndarray, N, d0 = 0.1, shape = 0, mess = 0.1) -> None:
                 pnts[2, i] = pnts[2, i_ang] * (1 + random.randn() * mess)
         elif (shape == 1):  #circle
             pnts[2, i] = pnts[2, i - 1] + deltaAng
+
+    pntsBuf = pnts[:2, :].copy()
 
 def getLines(lines : np.ndarray, pnts : np.ndarray, Npnts, tolerance = 0.1) -> int:
     """#returns the number of the gotten lines in lines"""
@@ -169,11 +173,8 @@ def nextPnts(event):
     with mutex:
         firstPnt(pnts)
 
-        t0 = time.time()
-        for i in range(10):
-            createPnts(pnts, N, shape = shape, mess = mess)
-            getLines(lines, pnts, N, tol)
-        print((time.time() - t0) / 10.0)
+        createPnts(pnts, N, shape = shape, mess = mess)
+        getLines(lines, pnts, N, tol)
 
         drawLoad()
 
@@ -211,15 +212,18 @@ def jitter(event):
     def foo():
         while jit and plt.get_fignums():
             with mutex:
-                pnts[:2, :] = pntsBuf + 0.02 * random.rand(2, N) - 0.01
+                rns = np.zeros([2, N])
+                for i in range(N):
+                    if random.rand() > 0.9:
+                        rns[:, i] += 0.5 * random.rand(2) - 0.25
+                pnts[:2, :] = pntsBuf + 0.02 * random.rand(2, N) - 0.01 + rns
+
                 getLines(lines, pnts, N, tol)
                 drawLoad(ax.get_xlim(), ax.get_ylim())
             time.sleep(0.5)
 
     with mutex:
         jit = not jit
-        if jit:
-            pntsBuf = pnts[:2, :]
         threading.Thread(target=foo).start()
 
 def main():
