@@ -23,7 +23,7 @@ ax = plt.axes([0.07, 0.25, 0.45, 0.7])
 
 mutex = threading.RLock()
 
-def lineApprox(pnts : np.ndarray, fr : int, to : int):
+def lineApproxAveraging(pnts : np.ndarray, fr : int, to : int):
 
     b0 = np.exp(np.linspace(-0.25, 1 - 0.25, (to - fr))**2 / -0.03)
     # b0 = np.linspace(1.0, 0.0, N)**2.0
@@ -37,6 +37,12 @@ def lineApprox(pnts : np.ndarray, fr : int, to : int):
     a = (pnt1[1] - pnt0[1]) / (pnt1[0] - pnt0[0])
     b = pnt0[1] - a * pnt0[0]
     return (a, b, np.mean((a * pnts[0, fr : to] - pnts[1, fr : to] + b)**2) / (b**2 + 1))
+
+def lineApproxLMS(pnts : np.ndarray, fr : int, to : int):
+    #LMS
+    a = 0
+    b = 0
+    return (a, b, 0)
 
 def firstPnt(pnts : np.ndarray) -> None:
     pnts[0, 0] = 0.5 * random.rand() - 0.25
@@ -92,10 +98,10 @@ def getLines(lines : np.ndarray, pnts : np.ndarray, Npnts, tolerance = 0.1) -> i
                         line[1] = pnts[1, i - byNpnts] - line[0] * pnts[0, i - byNpnts]
                     byNpnts += 1
                 else:
-                    (line[0], line[1], q0) = lineApprox(pnts, i - byNpnts, i)
+                    (line[0], line[1], q0) = lineApproxAveraging(pnts, i - byNpnts, i)
 
                     while (q0 > 0.0001):
-                        (line_0, line_1, q) = lineApprox(pnts, i - byNpnts, i - 1)
+                        (line_0, line_1, q) = lineApproxAveraging(pnts, i - byNpnts, i - 1)
                         if (q > q0):
                             break
                         else:
