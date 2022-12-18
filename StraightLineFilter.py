@@ -23,6 +23,7 @@ ax = plt.axes([0.07, 0.25, 0.45, 0.7])
 
 mutex = threading.RLock()
 
+
 def lineApproxAveraging(pnts : np.ndarray, fr : int, to : int):
 
     b0 = np.exp(np.linspace(-0.25, 1 - 0.25, (to - fr))**2 / -0.03)
@@ -36,13 +37,54 @@ def lineApproxAveraging(pnts : np.ndarray, fr : int, to : int):
 
     a = (pnt1[1] - pnt0[1]) / (pnt1[0] - pnt0[0])
     b = pnt0[1] - a * pnt0[0]
-    return (a, b, np.mean((a * pnts[0, fr : to] - pnts[1, fr : to] + b)**2) / (b**2 + 1))
+    return (a, b, np.mean(((a * pnts[0, fr : to] - pnts[1, fr : to] + b)**2) / (b**2 + 1)))
 
-def lineApproxLMS(pnts : np.ndarray, fr : int, to : int):
-    #LMS
-    a = 0
-    b = 0
-    return (a, b, 0)
+
+# ====== РЕАЛИЗАЦИЯ ФУНКЦИЙ МНК С ИСПОЛЬЗОВАНИЕМ NUMPY =======
+
+def calc_loss_func(seg_pnts: np.ndarray, A: float, C: float):
+    loss_func_value = 0
+    for i in range(seg_pnts.shape[1]):
+        # Расстояние до текущей прямой
+        dist = abs(seg_pnts[0, i] * A - seg_pnts[1, i] + C) / m.sqrt(A ** 2 + 1)
+        loss_func_value += dist ** 2
+    return loss_func_value
+
+
+def calc_sums(seg_pnts: np.ndarray):
+    x_sum = np.sum(seg_pnts[0])  # сумма всех х координат
+    y_sum = np.sum(seg_pnts[1])  # сумма всех у координат
+    xy_sum = np.dot(seg_pnts[0], seg_pnts[1].T)  # сумма произведений всех х и всех у координат соответственно
+    x_sq_sum = np.dot(seg_pnts[0], seg_pnts[0].T)  # сумма квадратов всех координат х
+    y_sq_sum = np.dot(seg_pnts[1], seg_pnts[1].T)  # сумма квадратов всех координат у
+
+    return x_sum, y_sum, xy_sum, x_sq_sum, y_sq_sum
+
+
+def lineApproxLSM(pnts: np.ndarray, fr: int, to: int):
+    # data_x, data_y = segment_data
+    pts_num = to - fr
+    x_sum, y_sum, xy_sum, x_sq_sum, y_sq_sum = calc_sums(pnts[:2, fr:to])
+    # Вычисление A для минимумов функции потерь
+    phi = xy_sum - x_sum * y_sum / pts_num
+    theta = (x_sq_sum - y_sq_sum) / phi + (y_sum ** 2 - x_sum ** 2) / (pts_num * phi)
+    D = theta ** 2 + 4  # дискриминант
+    A1 = (-theta + m.sqrt(D)) / 2
+    A2 = (-theta - m.sqrt(D)) / 2
+    # Вычисление С для минимумов функции потерь
+    C1 = (y_sum - x_sum * A1) / pts_num
+    C2 = (y_sum - x_sum * A2) / pts_num
+    # Подстановка в функцию потерь, выявление лучшего
+    lf1 = calc_loss_func(pnts[:2, fr:to], A1, C1)
+    lf2 = calc_loss_func(pnts[:2, fr:to], A2, C2)
+    # Выбор наименьшего значения функции потерь, возврат соответствующих ему параметров А и С
+    if lf1 < lf2:
+        return A1, C1, np.mean(((A1 * pnts[0, fr:to] - pnts[1, fr:to] + C1) ** 2) / (A1 ** 2 + 1))
+    else:
+        return A2, C2, np.mean(((A2 * pnts[0, fr:to] - pnts[1, fr:to] + C2) ** 2) / (A2 ** 2 + 1))
+
+# =====================================================================
+
 
 def firstPnt(pnts : np.ndarray) -> None:
     pnts[0, 0] = 0.5 * random.rand() - 0.25
@@ -102,10 +144,11 @@ def getLines(lines : np.ndarray, pnts : np.ndarray, Npnts, tolerance = 0.1) -> i
                         line[1] = pnts[1, i - byNpnts] - line[0] * pnts[0, i - byNpnts]
                     byNpnts += 1
                 else:
-                    (line[0], line[1], q0) = lineApproxAveraging(pnts, i - byNpnts, i)
-
+                    # (line[0], line[1], q0) = lineApproxAveraging(pnts, i - byNpnts, i)
+                    (line[0], line[1], q0) = lineApproxLSM(pnts, i - byNpnts, i)
                     while (q0 > 0.0001):
-                        (line_0, line_1, q) = lineApproxAveraging(pnts, i - byNpnts, i - 1)
+                        # (line_0, line_1, q) = lineApproxAveraging(pnts, i - byNpnts, i - 1)
+                        (line_0, line_1, q) = lineApproxLSM(pnts, i - byNpnts, i - 1)
                         if (q > q0):
                             break
                         else:
@@ -161,8 +204,8 @@ def drawLoad(xlim = (-4, 4), ylim = (-4, 4)):
     ax.set(xlim = xlim, ylim = ylim)
     ax.set_aspect('equal')
 
-    ax.scatter(pnts[0, 0], pnts[1, 0], s = 20, marker = 'o', Color = 'red')
-    ax.scatter(pnts[0, 1:], pnts[1, 1:], s = 20, marker = 'o', Color = 'gray')
+    ax.scatter(pnts[0, 0], pnts[1, 0], s = 20, marker = 'o', color='red')
+    ax.scatter(pnts[0, 1:], pnts[1, 1:], s = 20, marker = 'o', color = 'gray')
 
     for i in range(Nlines):
         ax.plot([lines[2, i], lines[3, i]], [lines[0, i] * lines[2, i] + lines[1, i], lines[0, i] * lines[3, i] + lines[1, i]], linewidth = 3)
