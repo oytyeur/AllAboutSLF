@@ -17,6 +17,7 @@ lines = np.zeros([4, N - 1])
 tol = 0.1
 mess = 0.1
 shape = 0
+mode = 'avg'  # метод аппроксимации
 
 fig = plt.figure()
 ax = plt.axes([0.07, 0.25, 0.45, 0.7])
@@ -113,9 +114,10 @@ def createPnts(pnts : np.ndarray, N, d0 = 0.1, shape = 0, mess = 0.1) -> None:
 
     pntsBuf = pnts[:2, :].copy()
 
-def getLines(lines : np.ndarray, pnts : np.ndarray, Npnts, tolerance = 0.1) -> int:
-    """#returns the number of the gotten lines in lines"""
 
+def getLines(lines: np.ndarray, pnts: np.ndarray, Npnts, tolerance=0.1, mode='avg') -> int:
+    """#returns the number of the gotten lines in lines"""
+    t0 = time.time()
     global Nlines
 
     line = np.zeros([4])
@@ -144,11 +146,17 @@ def getLines(lines : np.ndarray, pnts : np.ndarray, Npnts, tolerance = 0.1) -> i
                         line[1] = pnts[1, i - byNpnts] - line[0] * pnts[0, i - byNpnts]
                     byNpnts += 1
                 else:
-                    # (line[0], line[1], q0) = lineApproxAveraging(pnts, i - byNpnts, i)
-                    (line[0], line[1], q0) = lineApproxLSM(pnts, i - byNpnts, i)
+                    # аппроксимация в зависимости от режима mode (avg - усреднение, lsm - МНК)
+                    if mode == 'avg':
+                        (line[0], line[1], q0) = lineApproxAveraging(pnts, i - byNpnts, i)
+                    elif mode == 'lsm':
+                        (line[0], line[1], q0) = lineApproxLSM(pnts, i - byNpnts, i)
+
                     while (q0 > 0.0001):
-                        # (line_0, line_1, q) = lineApproxAveraging(pnts, i - byNpnts, i - 1)
-                        (line_0, line_1, q) = lineApproxLSM(pnts, i - byNpnts, i - 1)
+                        if mode == 'avg':
+                            (line_0, line_1, q) = lineApproxAveraging(pnts, i - byNpnts, i - 1)
+                        elif mode == 'lsm':
+                            (line_0, line_1, q) = lineApproxLSM(pnts, i - byNpnts, i - 1)
                         if (q > q0):
                             break
                         else:
@@ -194,49 +202,58 @@ def getLines(lines : np.ndarray, pnts : np.ndarray, Npnts, tolerance = 0.1) -> i
 
         lines[:, Nlines] = line
         Nlines += 1
-    
+
+    t1 = time.time()
+    print(mode, t1 - t0)
     return Nlines
 
-def drawLoad(xlim = (-4, 4), ylim = (-4, 4)):
+
+def drawLoad(xlim=(-4, 4), ylim=(-4, 4)):
 
     ax.cla()
 
-    ax.set(xlim = xlim, ylim = ylim)
+    ax.set(xlim=xlim, ylim=ylim)
     ax.set_aspect('equal')
 
-    ax.scatter(pnts[0, 0], pnts[1, 0], s = 20, marker = 'o', color='red')
-    ax.scatter(pnts[0, 1:], pnts[1, 1:], s = 20, marker = 'o', color = 'gray')
+    ax.scatter(pnts[0, 0], pnts[1, 0], s=20, marker='o', color='red')
+    ax.scatter(pnts[0, 1:], pnts[1, 1:], s=20, marker='o', color='gray')
+    ax.set(title=mode)
+    ax.axis('scaled')
 
     for i in range(Nlines):
-        ax.plot([lines[2, i], lines[3, i]], [lines[0, i] * lines[2, i] + lines[1, i], lines[0, i] * lines[3, i] + lines[1, i]], linewidth = 3)
+        ax.plot([lines[2, i], lines[3, i]], [lines[0, i] * lines[2, i] + lines[1, i], lines[0, i] * lines[3, i] + lines[1, i]], linewidth=3)
     
     fig.canvas.draw_idle()
+
 
 def nextPnts(event):
     with mutex:
         firstPnt(pnts)
 
-        createPnts(pnts, N, shape = shape, mess = mess)
-        getLines(lines, pnts, N, tol)
+        createPnts(pnts, N, shape=shape, mess=mess)
+        getLines(lines, pnts, N, tol, mode=mode)
 
         drawLoad()
+
 
 def updatePnts(val):
     global mess
     with mutex:
         mess = val
-        createPnts(pnts, N, shape = shape, mess = mess)
-        getLines(lines, pnts, N, tol)
+        createPnts(pnts, N, shape=shape, mess=mess)
+        getLines(lines, pnts, N, tol, mode=mode)
         drawLoad()
+
 
 def updateLinesTolerance(val):
     global tol
     
     with mutex:
         tol = val
-        getLines(lines, pnts, N, tol)
+        getLines(lines, pnts, N, tol, mode=mode)
     
     drawLoad(ax.get_xlim(), ax.get_ylim())
+
 
 def updatePntsShape(event):
     global shape
@@ -244,9 +261,10 @@ def updatePntsShape(event):
         shape += 1
         if shape > 1:
             shape = 0
-        createPnts(pnts, N, shape = shape, mess = mess)
-        getLines(lines, pnts, N, tol)
+        createPnts(pnts, N, shape=shape, mess=mess)
+        getLines(lines, pnts, N, tol, mode=mode)
         drawLoad()
+
 
 jit = False
 def jitter(event):
@@ -261,7 +279,7 @@ def jitter(event):
                         rns[:, i] += 0.5 * random.rand(2) - 0.25
                 pnts[:2, :] = pntsBuf + 0.02 * random.rand(2, N) - 0.01 + rns
 
-                getLines(lines, pnts, N, tol)
+                getLines(lines, pnts, N, tol, mode=mode)
                 drawLoad(ax.get_xlim(), ax.get_ylim())
             time.sleep(0.5)
 
@@ -269,12 +287,30 @@ def jitter(event):
         jit = not jit
         threading.Thread(target=foo).start()
 
+
+# Смена метода аппроксимации: avg - усреднение, lsm - МНК
+def change_mode(event):
+    global mode
+    with mutex:
+        if mode == 'avg':
+            mode = 'lsm'
+        elif mode == 'lsm':
+            mode = 'avg'
+        getLines(lines, pnts, N, tol, mode=mode)
+        drawLoad()
+
+
+# Вывод графиков времени аппроксимации
+def plot_timing(event):
+    return 0
+
+
 def main():
 
     firstPnt(pnts)
-    createPnts(pnts, N, shape = shape, mess = mess)
+    createPnts(pnts, N, shape=shape, mess=mess)
 
-    getLines(lines, pnts, N, tol)
+    getLines(lines, pnts, N, tol, mode=mode)
     drawLoad()
 
     ax1 = plt.axes([0.15, 0.17, 0.45, 0.03])
@@ -282,6 +318,8 @@ def main():
     ax3 = plt.axes([0.55, 0.28, 0.1, 0.04])
     ax4 = plt.axes([0.55, 0.35, 0.1, 0.04])
     ax5 = plt.axes([0.55, 0.42, 0.1, 0.04])
+    ax6 = plt.axes([0.55, 0.49, 0.1, 0.04])
+    ax7 = plt.axes([0.55, 0.6, 0.1, 0.1])
 
     sz1 = Slider(ax1, 'tolerance', 0.0, 0.8, tol, valstep = 0.02)
     sz1.on_changed(updateLinesTolerance)
@@ -298,7 +336,14 @@ def main():
     btn3 = Button(ax5, 'Next', hovercolor='0.975')
     btn3.on_clicked(nextPnts)
 
+    btn4 = Button(ax6, 'Mode', hovercolor='0.975')
+    btn4.on_clicked(change_mode)
+
+    btn5 = Button(ax7, 'Plot\ntiming', hovercolor='0.975')
+    btn5.on_clicked(plot_timing)
+
     plt.show()
+
 
 if __name__ == "__main__":
     main()
