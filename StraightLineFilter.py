@@ -18,6 +18,7 @@ tol = 0.1
 mess = 0.1
 shape = 0
 mode = 'avg'  # метод аппроксимации
+timing = np.zeros(2, dtype=float)  # значения времени исполнения аппроксимации avg и lsm
 
 fig = plt.figure()
 ax = plt.axes([0.07, 0.25, 0.45, 0.7])
@@ -120,6 +121,8 @@ def getLines(lines: np.ndarray, pnts: np.ndarray, Npnts, tolerance=0.1, mode='av
     t0 = time.time()
     global Nlines
 
+    global timing
+
     line = np.zeros([4])
     pcross = np.array([0.0, 0.0])
 
@@ -204,7 +207,13 @@ def getLines(lines: np.ndarray, pnts: np.ndarray, Npnts, tolerance=0.1, mode='av
         Nlines += 1
 
     t1 = time.time()
-    print(mode, t1 - t0)
+
+    # сохранение значений времени выполнения аппроксимации всей траектории
+    if mode == 'avg':
+        timing[0] = t1 - t0
+    elif mode == 'lsm':
+        timing[1] = t1 - t0
+
     return Nlines
 
 
@@ -300,9 +309,30 @@ def change_mode(event):
         drawLoad()
 
 
-# Вывод графиков времени аппроксимации
-def plot_timing(event):
-    return 0
+# Вывод графиков времени аппроксимации каждым алгоритмом
+def plot_timing_cumsum(event):
+    tm_fig, tm_ax = plt.subplots()
+    t_avg_cumsum = 0  # кумулятивная сумма для усреднения
+    t_lsm_cumsum = 0  # кумулятивная сумма для МНК
+    n_samples = 10  # число различных наборов точек
+    n_tests = 10  # число запусков на одном наборе
+    with mutex:
+        for i in range(n_samples):
+            nextPnts(None)
+            for j in range(n_tests):
+                # дважды меняем метод аппроксимации
+                change_mode(None)
+                change_mode(None)
+                tm_ax.plot([j + n_tests * i, j + n_tests * i + 1],
+                           [t_avg_cumsum, t_avg_cumsum + timing[0]],
+                           color='red')
+                tm_ax.plot([j + n_tests * i, j + n_tests * i + 1],
+                           [t_lsm_cumsum, t_lsm_cumsum + timing[1]],
+                           color='blue')
+                t_avg_cumsum += timing[0]
+                t_lsm_cumsum += timing[1]
+
+        tm_fig.show()
 
 
 def main():
@@ -321,10 +351,10 @@ def main():
     ax6 = plt.axes([0.55, 0.49, 0.1, 0.04])
     ax7 = plt.axes([0.55, 0.6, 0.1, 0.1])
 
-    sz1 = Slider(ax1, 'tolerance', 0.0, 0.8, tol, valstep = 0.02)
+    sz1 = Slider(ax1, 'tolerance', 0.0, 0.8, tol, valstep=0.02)
     sz1.on_changed(updateLinesTolerance)
 
-    sz2 = Slider(ax2, 'mess', 0.0, 1.0, mess, valstep = 0.02)
+    sz2 = Slider(ax2, 'mess', 0.0, 1.0, mess, valstep=0.02)
     sz2.on_changed(updatePnts)
 
     btn1 = Button(ax3, 'Jitter', hovercolor='0.975')
@@ -339,8 +369,8 @@ def main():
     btn4 = Button(ax6, 'Mode', hovercolor='0.975')
     btn4.on_clicked(change_mode)
 
-    btn5 = Button(ax7, 'Plot\ntiming', hovercolor='0.975')
-    btn5.on_clicked(plot_timing)
+    btn5 = Button(ax7, 'Start\ntest', hovercolor='0.975')
+    btn5.on_clicked(plot_timing_cumsum)
 
     plt.show()
 
